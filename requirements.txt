@@ -6,3 +6,5 @@ seqeval
 rarfile
 streamlit
 plotly
+fastapi
+uvicorn

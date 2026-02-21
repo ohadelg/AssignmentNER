@@ -9,7 +9,12 @@ import torch
 from tqdm import tqdm
 
 # Set device
-device = 0 if torch.cuda.is_available() else -1
+if torch.cuda.is_available():
+    device = 0
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+else:
+    device = -1
 print(f"Using device: {device}")
 
 def load_dnrti_file(file_path):
@@ -69,7 +74,9 @@ def run_analysis(model_path, model_name, train_data, sample_size=2000):
     
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = AutoModelForTokenClassification.from_pretrained(model_path)
-    nlp = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple", device=device)
+    # Use "first" aggregation strategy which is more robust for XLM-R models like CyNER
+    # It ensures subwords are correctly merged into the parent token label.
+    nlp = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="first", device=device)
 
     correlations = []
     print(f"Processing {sample_size} sentences...")
