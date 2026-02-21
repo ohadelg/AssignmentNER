@@ -13,7 +13,7 @@ import charts
 import components
 import entity_processor
 from config import PAGE_ICON, PAGE_TITLE
-from ner_service import SecureBertNERProvider
+from ner_service import RemoteNERProvider
 from styles import APP_CSS
 
 # ── Page configuration (must be the first Streamlit call) ─────────────────────
@@ -66,8 +66,8 @@ if analyse_clicked and uploaded_file is not None:
         st.warning("The uploaded file appears to be empty.")
         st.stop()
 
-    with st.spinner("Loading SecureBERT-NER model…"):
-        ner = SecureBertNERProvider()
+    with st.spinner("Connecting to SecureBERT-NER backend…"):
+        ner = RemoteNERProvider()
 
     progress = st.progress(0, text="Extracting entities…")
 

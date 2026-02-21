@@ -1,7 +1,7 @@
 """
 ner_service.py
 ──────────────
-Defines the NER abstraction layer and provides the SecureBERT implementation.
+Defines the NER abstraction layer and provides both Local and Remote implementations.
 
 SOLID notes
 ───────────
@@ -21,10 +21,11 @@ from collections.abc import Callable
 from typing import Any
 
 import torch
+import requests
 import streamlit as st
 from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
 
-from config import MAX_CHUNK_CHARS, MODEL_PATH
+from config import MAX_CHUNK_CHARS, MODEL_PATH, BACKEND_URL
 
 
 # ── Abstract interface ─────────────────────────────────────────────────────────
@@ -79,28 +80,22 @@ def _chunk_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     return chunks or [text[:max_chars]]
 
 
-# ── SecureBERT implementation ──────────────────────────────────────────────────
+# ── SecureBERT implementation (Local) ──────────────────────────────────────────
 
 class SecureBertNERProvider(NERProvider):
     """
     NER provider backed by the local SecureBERT-NER model.
-
-    The HuggingFace pipeline is loaded once and cached via Streamlit's
-    @st.cache_resource so that reloads across user interactions are free.
-
-    To swap the underlying model, change MODEL_PATH in config.py; this class
-    does not need to change.
+    Used by the backend server.
     """
 
     def __init__(self, model_path: str = MODEL_PATH) -> None:
         self._model_path = model_path
         self._pipeline = self._load_pipeline()
 
-    @st.cache_resource(show_spinner=False)
-    def _load_pipeline(_self) -> Any:  # noqa: N805 – 'self' intentional for cache key
+    def _load_pipeline(self) -> Any:
         device = 0 if torch.cuda.is_available() else -1
-        tokenizer = AutoTokenizer.from_pretrained(_self._model_path)
-        model = AutoModelForTokenClassification.from_pretrained(_self._model_path)
+        tokenizer = AutoTokenizer.from_pretrained(self._model_path)
+        model = AutoModelForTokenClassification.from_pretrained(self._model_path)
         return pipeline(
             "ner",
             model=model,
@@ -117,9 +112,6 @@ class SecureBertNERProvider(NERProvider):
         """
         Chunk *text* into model-safe pieces, run the pipeline on each, and
         return the concatenated list of raw entity dicts.
-
-        Calls *on_chunk(current, total)* after each chunk so the caller can
-        update a progress indicator.
         """
         chunks = _chunk_text(text)
         total = len(chunks)
@@ -131,4 +123,42 @@ class SecureBertNERProvider(NERProvider):
                 pass
             if on_chunk:
                 on_chunk(i, total)
+        return results
+
+
+# ── Remote implementation (Frontend) ───────────────────────────────────────────
+
+class RemoteNERProvider(NERProvider):
+    """
+    NER provider that communicates with a remote FastAPI backend.
+    Used by the Streamlit frontend.
+    """
+    def __init__(self, backend_url: str = BACKEND_URL) -> None:
+        self._backend_url = backend_url
+
+    def extract(
+        self,
+        text: str,
+        on_chunk: Callable[[int, int], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        chunks = _chunk_text(text)
+        total = len(chunks)
+        results: list[dict[str, Any]] = []
+        
+        for i, chunk in enumerate(chunks, start=1):
+            try:
+                response = requests.post(
+                    f"{self._backend_url}/extract",
+                    json={"text": chunk},
+                    timeout=60
+                )
+                response.raise_for_status()
+                results.extend(response.json()["entities"])
+            except Exception as e:
+                # We use st.error here as it's intended for the Streamlit UI
+                st.error(f"Error communicating with backend: {e}")
+            
+            if on_chunk:
+                on_chunk(i, total)
+                
         return results

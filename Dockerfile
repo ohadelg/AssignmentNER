@@ -10,7 +10,6 @@ WORKDIR /workspace
 ENV PYTHONPATH=/workspace/app
 
 # Install system dependencies
-# build-essential might be needed for some python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -22,8 +21,8 @@ COPY requirements.txt .
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-
-# We copy NER because the app expects the model there via symlink
+# Copy the model and app code
+# The model is expected in NER/SecureBert-NER
 COPY NER/ ./NER/
 COPY app/ ./app/
 
@@ -32,11 +31,11 @@ RUN useradd -m appuser
 RUN chown -R appuser:appuser /workspace
 USER appuser
 
-# Expose the port Streamlit runs on
-EXPOSE 8501
+# Expose the port FastAPI runs on (internally)
+EXPOSE 8000
 
-# Healthcheck to ensure the container is running correctly
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+# Healthcheck to ensure the backend is running correctly
+HEALTHCHECK CMD curl --fail http://localhost:8000/health || exit 1
 
-# Command to run the app
-ENTRYPOINT ["streamlit", "run", "app/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Command to run the FastAPI server
+ENTRYPOINT ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8000"]

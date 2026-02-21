@@ -10,8 +10,17 @@ To tweak theming colors:   update BADGE_PALETTE or individual "color" values in 
 
 import os
 
+# ── API ────────────────────────────────────────────────────────────────────────
+BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8080")
+
 # ── Model ──────────────────────────────────────────────────────────────────────
-MODEL_PATH: str = os.path.join(os.path.dirname(__file__), "SecureBert-NER")
+# Try root path (Docker) first, then fallback to local app path
+_ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+MODEL_PATH: str = os.path.join(_ROOT_DIR, "NER", "SecureBert-NER")
+
+if not os.path.exists(MODEL_PATH):
+    # Fallback for older local structure if needed
+    MODEL_PATH = os.path.join(os.path.dirname(__file__), "SecureBert-NER")
 
 # ── Text chunking ──────────────────────────────────────────────────────────────
 # Conservative character limit per chunk so that the model's 512-token window
